@@ -29,6 +29,7 @@
 #include <pcl_ros/transforms.h>
 
 #include <iomanip>
+#include <fstream>
 #include <boost/thread/thread.hpp>
 #include <thread>
 
@@ -36,6 +37,7 @@
 #include <lvt2calib/AutoDetectLaser.h>
 #include <lvt2calib/FourCircleCenters.h>
 #include <lvt2calib/livox_utils.h>
+#include <lvt2calib/offline_circle_centers.h>
 #include <lvt2calib/LaserConfig.h>
 
 #define DEBUG 0
@@ -87,6 +89,7 @@ ros::Publisher reload_cloud_pub, calib_board_pub, four_center_pub, centers_pub, 
 ros::Publisher colored_planes_pub;
 
 string ns_str;
+string json_output_path;
 
 AutoDetectLaser myDetector;
 FourCircleCenters myFourCenters;
@@ -259,6 +262,23 @@ void callback(const PointCloud2::ConstPtr& laser_cloud)
                 to_send.cloud = four_center_ros;
                 centers_pub.publish(to_send);       // Topic: /livox_pattern/centers_tosend
 
+                // Write circle centers to JSON file
+                if (!json_output_path.empty())
+                {
+                    lvt2calib::CircleJsonOptions json_options;
+                    json_options.sensor_type = "livox";
+                    json_options.include_timestamp = true;
+                    json_options.timestamp = laser_cloud->header.stamp.toSec();
+                    if (lvt2calib::writeCircleCentersJson(json_output_path, *four_circle_centers, json_options))
+                    {
+                        ROS_INFO("[%s] Circle centers written to %s", ns_str.c_str(), json_output_path.c_str());
+                    }
+                    else
+                    {
+                        ROS_WARN("[%s] Could not open JSON output file: %s", ns_str.c_str(), json_output_path.c_str());
+                    }
+                }
+
                 if(DEBUG) ROS_INFO("Pattern centers published");
             }
         }
@@ -380,6 +400,7 @@ void load_param(ros::NodeHandle& nh_)
     nh_.param("use_RG_Pseg", use_RG_Pseg, false);
     nh_.param("queue_size", queue_size_, 1);
     nh_.param<std::string>("ns", ns_str, "laser");
+    nh_.param<std::string>("json_output_path", json_output_path, "/tmp/livox_circle_centers.json");
     nh_.param("if_use_single_board", if_use_single_board, false);
 
     return;
