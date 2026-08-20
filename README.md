@@ -348,6 +348,33 @@ Fields:
 - `num_centers`: number of detected circle centers (4 when extraction succeeds)
 - `centers`: array of `{x, y, z}` objects in the LiDAR coordinate frame
 
+**Offline PCD -> JSON tool**
+
+You can also export circle centers directly from a PCD file without ROS launch:
+
+```bash
+rosrun lvt2calib pcd_circle_centers \
+  --sensor livox \
+  --input /absolute/path/to/livox_acc_cloud.pcd \
+  --output /absolute/path/to/livox_circle_centers.json
+
+rosrun lvt2calib pcd_circle_centers \
+  --sensor ouster \
+  --preset os1_32 \
+  --input /absolute/path/to/ouster_cloud.pcd \
+  --output /absolute/path/to/ouster_circle_centers.json
+```
+
+Optional arguments:
+- `--template`: override the default template PCD (`$(find lvt2calib)/data/template_pcl/four_circle_boundary.pcd`)
+- `--preset`: `livox_horizon`, `livox_mid70`, `os1_32`, `os1_64`, or `os1_128`
+- `--laser-ring-num`: override Ouster ring count
+- threshold overrides such as `--cluster-tole`, `--cluster-size-min`, `--cluster-size-max`, `--i-filter-out-max`, `--rmse-ukn2tpl-thre`, `--rmse-tpl2ukn-thre`, `--cluster-size`, `--circle-radius`, `--circle-seg-thre`, `--circle-radius-thre`, `--circle-seg-dis-thre`
+
+Notes:
+- Livox offline input should match the accumulated cloud used online (for example the `/acc_cloud` output from `point_cloud_accumulation`)
+- Offline JSON adds an `input_pcd` field and writes `timestamp: null` because PCD files do not carry the ROS message timestamp used by the online nodes
+
 #### IV. Paper
 
 [L2V2T2Calib: Automatic and Unified Extrinsic Calibration Toolbox for Different 3D LiDAR, Visual Camera and Thermal Camera (IEEE Xplore)](https://ieeexplore.ieee.org/document/10186657)
