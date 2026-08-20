@@ -29,6 +29,7 @@
 #include <pcl_ros/transforms.h>
 
 #include <iomanip>
+#include <fstream>
 #include <boost/thread/thread.hpp>
 #include <thread>
 
@@ -87,6 +88,7 @@ ros::Publisher reload_cloud_pub, calib_board_pub, four_center_pub, centers_pub, 
 ros::Publisher colored_planes_pub;
 
 string ns_str;
+string json_output_path;
 
 AutoDetectLaser myDetector;
 FourCircleCenters myFourCenters;
@@ -259,6 +261,36 @@ void callback(const PointCloud2::ConstPtr& laser_cloud)
                 to_send.cloud = four_center_ros;
                 centers_pub.publish(to_send);       // Topic: /livox_pattern/centers_tosend
 
+                // Write circle centers to JSON file
+                if (!json_output_path.empty())
+                {
+                    std::ofstream jf(json_output_path.c_str());
+                    if (jf.is_open())
+                    {
+                        jf << std::fixed << std::setprecision(6);
+                        jf << "{\n";
+                        jf << "  \"sensor_type\": \"livox\",\n";
+                        jf << "  \"timestamp\": " << laser_cloud->header.stamp.toSec() << ",\n";
+                        jf << "  \"num_centers\": " << four_circle_centers->points.size() << ",\n";
+                        jf << "  \"centers\": [\n";
+                        for (size_t ci = 0; ci < four_circle_centers->points.size(); ++ci)
+                        {
+                            const auto& pt = four_circle_centers->points[ci];
+                            jf << "    {\"x\": " << pt.x << ", \"y\": " << pt.y << ", \"z\": " << pt.z << "}";
+                            if (ci + 1 < four_circle_centers->points.size()) jf << ",";
+                            jf << "\n";
+                        }
+                        jf << "  ]\n";
+                        jf << "}\n";
+                        jf.close();
+                        ROS_INFO("[%s] Circle centers written to %s", ns_str.c_str(), json_output_path.c_str());
+                    }
+                    else
+                    {
+                        ROS_WARN("[%s] Could not open JSON output file: %s", ns_str.c_str(), json_output_path.c_str());
+                    }
+                }
+
                 if(DEBUG) ROS_INFO("Pattern centers published");
             }
         }
@@ -380,6 +412,7 @@ void load_param(ros::NodeHandle& nh_)
     nh_.param("use_RG_Pseg", use_RG_Pseg, false);
     nh_.param("queue_size", queue_size_, 1);
     nh_.param<std::string>("ns", ns_str, "laser");
+    nh_.param<std::string>("json_output_path", json_output_path, "/tmp/livox_circle_centers.json");
     nh_.param("if_use_single_board", if_use_single_board, false);
 
     return;

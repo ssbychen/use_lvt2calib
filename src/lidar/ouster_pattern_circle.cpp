@@ -50,6 +50,8 @@
 #include <pcl/registration/icp.h>
 #include <pcl/io/pcd_io.h>
 #include <dynamic_reconfigure/server.h>
+#include <fstream>
+#include <iomanip>
 
 #include <lvt2calib/VeloCircleConfig.h>
 #include <lvt2calib/ouster_utils.h>
@@ -80,6 +82,7 @@ int min_centers_found_;
 int rings_count;
 
 string ns_str;
+string json_output_path;
 
 void callback(const PointCloud2::ConstPtr& laser_cloud, const PointCloud2::ConstPtr& calib_cloud)
 {
@@ -507,6 +510,36 @@ void callback(const PointCloud2::ConstPtr& laser_cloud, const PointCloud2::Const
 
     centers_pub.publish(to_send);   // Topic: /laser_pattern/centers_cloud
     ROS_INFO("Pattern centers published");
+
+    // Write circle centers to JSON file
+    if (!json_output_path.empty())
+    {
+      std::ofstream jf(json_output_path.c_str());
+      if (jf.is_open())
+      {
+        jf << std::fixed << std::setprecision(6);
+        jf << "{\n";
+        jf << "  \"sensor_type\": \"ouster\",\n";
+        jf << "  \"timestamp\": " << laser_cloud->header.stamp.toSec() << ",\n";
+        jf << "  \"num_centers\": " << centers_cloud->points.size() << ",\n";
+        jf << "  \"centers\": [\n";
+        for (size_t ci = 0; ci < centers_cloud->points.size(); ++ci)
+        {
+          const auto& pt = centers_cloud->points[ci];
+          jf << "    {\"x\": " << pt.x << ", \"y\": " << pt.y << ", \"z\": " << pt.z << "}";
+          if (ci + 1 < centers_cloud->points.size()) jf << ",";
+          jf << "\n";
+        }
+        jf << "  ]\n";
+        jf << "}\n";
+        jf.close();
+        ROS_INFO("[%s] Circle centers written to %s", ns_str.c_str(), json_output_path.c_str());
+      }
+      else
+      {
+        ROS_WARN("[%s] Could not open JSON output file: %s", ns_str.c_str(), json_output_path.c_str());
+      }
+    }
   }
 }
 
@@ -543,6 +576,7 @@ int main(int argc, char **argv){
   nh_.param("cluster_size", cluster_size_, 0.02);
   nh_.param("min_centers_found", min_centers_found_, 4);
   nh_.param<std::string>("ns", ns_str, "laser");
+  nh_.param<std::string>("json_output_path", json_output_path, "/tmp/ouster_circle_centers.json");
   nh_.param("laser_ring_num", rings_count, 32);
   findLaserType(rings_count);
 
