@@ -254,6 +254,17 @@ target_link_libraries(ouster_pattern_circle
   ${PCL_LIBRARIES}
 )
 
+add_executable(pcd_circle_centers src/lidar/pcd_circle_centers.cpp)
+add_dependencies(pcd_circle_centers
+  ${catkin_EXPORTED_TARGETS}
+  lvt2calib_generate_messages_cpp
+  ${PROJECT_NAME}_gencfg
+)
+target_link_libraries(pcd_circle_centers
+  ${catkin_LIBRARIES}
+  ${PCL_LIBRARIES}
+)
+
 add_executable(cam_pattern src/camera/cam_pattern.cpp)
 add_dependencies(cam_pattern 
   ${catkin_EXPORTED_TARGETS}

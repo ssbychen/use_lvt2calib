@@ -37,6 +37,7 @@
 #include <lvt2calib/AutoDetectLaser.h>
 #include <lvt2calib/FourCircleCenters.h>
 #include <lvt2calib/livox_utils.h>
+#include <lvt2calib/offline_circle_centers.h>
 #include <lvt2calib/LaserConfig.h>
 
 #define DEBUG 0
@@ -264,25 +265,12 @@ void callback(const PointCloud2::ConstPtr& laser_cloud)
                 // Write circle centers to JSON file
                 if (!json_output_path.empty())
                 {
-                    std::ofstream jf(json_output_path.c_str());
-                    if (jf.is_open())
+                    lvt2calib::CircleJsonOptions json_options;
+                    json_options.sensor_type = "livox";
+                    json_options.include_timestamp = true;
+                    json_options.timestamp = laser_cloud->header.stamp.toSec();
+                    if (lvt2calib::writeCircleCentersJson(json_output_path, *four_circle_centers, json_options))
                     {
-                        jf << std::fixed << std::setprecision(6);
-                        jf << "{\n";
-                        jf << "  \"sensor_type\": \"livox\",\n";
-                        jf << "  \"timestamp\": " << laser_cloud->header.stamp.toSec() << ",\n";
-                        jf << "  \"num_centers\": " << four_circle_centers->points.size() << ",\n";
-                        jf << "  \"centers\": [\n";
-                        for (size_t ci = 0; ci < four_circle_centers->points.size(); ++ci)
-                        {
-                            const auto& pt = four_circle_centers->points[ci];
-                            jf << "    {\"x\": " << pt.x << ", \"y\": " << pt.y << ", \"z\": " << pt.z << "}";
-                            if (ci + 1 < four_circle_centers->points.size()) jf << ",";
-                            jf << "\n";
-                        }
-                        jf << "  ]\n";
-                        jf << "}\n";
-                        jf.close();
                         ROS_INFO("[%s] Circle centers written to %s", ns_str.c_str(), json_output_path.c_str());
                     }
                     else
