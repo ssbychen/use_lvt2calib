@@ -18,27 +18,11 @@
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/common/eigen.h>
 #include <pcl/common/transforms.h>
-#include <pcl_ros/transforms.h>
 #include <pcl/registration/icp.h>
-#include <ros/ros.h>
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/eigen.hpp>
-
-#ifdef TF2
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_listener.h>
-#include <tf2_ros/transform_broadcaster.h>
-#include <tf2/LinearMath/Matrix3x3.h>
-#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
-#include <geometry_msgs/TransformStamped.h>
-#else
-#include <tf/tf.h>
-#include <tf/transform_broadcaster.h>
-#include <tf/transform_listener.h>
-#include <tf_conversions/tf_eigen.h>
-#endif
 
 #include "excalib_min2d.h"
 #include "lvt2_utlis.h"
@@ -85,12 +69,9 @@ class lvt2Calib
     // std::vector<poi> samples;
     std::vector<poi> feature_points;
     Eigen::Matrix3d cameraMatrix_;
-    tf::Transform transf_2d;
-    tf::Transform transf_3d;
-    tf::Transform transf_gt;
-    tf::StampedTransform tf_livox_cam_min2d;
-    tf::StampedTransform tf_livox_cam_min3d;
-    tf::StampedTransform tf_livox_cam_gt;
+    Eigen::Matrix4d transf_2d;
+    Eigen::Matrix4d transf_3d;
+    Eigen::Matrix4d transf_gt;
     pcl::PointCloud<pcl::PointXYZ>::Ptr s1_cloud;
     pcl::PointCloud<pcl::PointXYZ>::Ptr s2_cloud; // camera points
     std::vector<cv::Point2f> cam_2d_points;
@@ -154,10 +135,10 @@ bool lvt2Calib::loadCSV(const char* filename)
 {
     ifstream loadfile;
     loadfile.open(filename);
-    ROS_INFO("<<<<<<<<<<< LOADING FILE %s", filename);
+    cout << "<<<<<<<<<<< LOADING FILE " << filename << endl;
     if(!loadfile)
     {
-        ROS_WARN("Opening file faild!");
+        cerr << "Opening file faild!" << endl;
         return false;
     }
     int i = 0;
@@ -241,7 +222,7 @@ bool lvt2Calib::loadCSV(const char* filename)
         cout << "cam_2d_points.size = " << cam_2d_points.size() << endl;
     }
     // cout << "line num = " << i << endl;
-    ROS_INFO("<<<<<<<<<<<<<<<<<< pos num: %d", feature_points.size());
+    cout << "<<<<<<<<<<<<<<<<<< pos num: " << feature_points.size() << endl;
 
     return true;
 }
@@ -298,7 +279,7 @@ Eigen::Matrix4d lvt2Calib::ExtCalib3D(pcl::PointCloud<pcl::PointXYZ>::Ptr source
     0, 0, 1, x[2],
     0, 0, 0, 1;
     
-    if(DEBUG) ROS_INFO("Step 1: Translation");
+    if(DEBUG) cout << "Step 1: Translation" << endl;
     if(DEBUG) cout << Tm << endl;
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr translated_pc (new pcl::PointCloud<pcl::PointXYZ> ());
@@ -313,29 +294,19 @@ Eigen::Matrix4d lvt2Calib::ExtCalib3D(pcl::PointCloud<pcl::PointXYZ>::Ptr source
     icp.setMaxCorrespondenceDistance(0.2);
     icp.setMaximumIterations(1000);
     if (icp.hasConverged()){
-        if(DEBUG) ROS_INFO("ICP Converged. Score: %lf", icp.getFitnessScore());
+        if(DEBUG) cout << "ICP Converged. Score: " << icp.getFitnessScore() << endl;
     }else{
-        ROS_WARN("ICP failed to converge");
-        // return 0;
-        // break;
+        cerr << "ICP failed to converge" << endl;
     }
-    if(DEBUG) ROS_INFO("Step 2. ICP Transformation:");
+    if(DEBUG) cout << "Step 2. ICP Transformation:" << endl;
     if(DEBUG) cout << icp.getFinalTransformation() << std::endl;
 
     Eigen::Matrix4d transformation = icp.getFinalTransformation().cast<double>();
     Eigen::Matrix4d final_trans = transformation * Tm;
     // Eigen::Matrix4d final_trans = transformation;
 
-    tf::Matrix3x3 tf3d;
-    tf3d.setValue(final_trans(0,0), final_trans(0,1), final_trans(0,2),
-    final_trans(1,0), final_trans(1,1), final_trans(1,2),
-    final_trans(2,0), final_trans(2,1), final_trans(2,2));
-
-    if(DEBUG) ROS_INFO("Final Transformation");
+    if(DEBUG) cout << "Final Transformation" << endl;
     if(DEBUG) cout << final_trans << endl;
-
-    // tf::Quaternion tfqt;
-    // tf3d.getRotation(tfqt);
 
     return final_trans;
 }
@@ -485,74 +456,10 @@ std::vector<double> lvt2Calib::calAlignError(pcl::PointCloud<pcl::PointXYZ>::Ptr
 
 Eigen::Matrix4f lvt2Calib::obtainGT_GAZEBO()
 {
-    // ground truth 6dof params
-    double roll_gt, pitch_gt, yaw_gt;
-    double tx_gt, ty_gt, tz_gt;
-    Eigen::Matrix4f Tr_v2s_gt, Tr_s2c_gt, Tr_v2c_gt;
-
-    tf::TransformListener listener;
-    tf::StampedTransform transform;  
-    try{ 
-        
-        // stereo_camera_gt
-        listener.waitForTransform("/stereo_gt", "/livox_gt", ros::Time(0), ros::Duration(5.0), ros::Duration(2));
-        listener.lookupTransform("/stereo_gt", "/livox_gt",  
-                                ros::Time(0), transform);
-        // listener.lookupTransform("/stereo_gt", "/livox_gt",  
-        //                         ros::Time::now(), transform);
-                
-        tx_gt = transform.getOrigin().getX();
-        ty_gt = transform.getOrigin().getY();
-        tz_gt = transform.getOrigin().getZ();
-
-        if(DEBUG)
-        {
-            cout << " [V2S] Get /tf from /livox_gt to /stereo_gt: " << endl;
-            cout << "translation =" << tx_gt << ", " << ty_gt << ", " << tz_gt << endl; 
-        }
-       
-
-        transform.getBasis().getRPY(roll_gt, pitch_gt, yaw_gt);
-        if(DEBUG)   cout << "euler angle =" << roll_gt << ", " << pitch_gt << ", " << yaw_gt << endl; 
-
-        tf::Transform trans_v2s_gt = transform;
-        Tr_v2s_gt << trans_v2s_gt.getBasis()[0][0], trans_v2s_gt.getBasis()[0][1], trans_v2s_gt.getBasis()[0][2], trans_v2s_gt.getOrigin().getX(),
-        trans_v2s_gt.getBasis()[1][0], trans_v2s_gt.getBasis()[1][1], trans_v2s_gt.getBasis()[1][2], trans_v2s_gt.getOrigin().getY(),
-        trans_v2s_gt.getBasis()[2][0], trans_v2s_gt.getBasis()[2][1], trans_v2s_gt.getBasis()[2][2], trans_v2s_gt.getOrigin().getZ(),
-        0, 0, 0, 1;
-
-        Tr_s2c_gt << 0, -1, 0, 0,
-        0, 0, -1, 0,
-        1, 0, 0, 0,
-        0, 0, 0, 1;
-
-        Tr_v2c_gt = Tr_s2c_gt * Tr_v2s_gt;
-
-        if(DEBUG)   cout << "Tr_v2c_gt = " << "\n" << Tr_v2c_gt << endl;
-        tf::Matrix3x3 tf3d;
-        tf3d.setValue(Tr_v2c_gt(0,0), Tr_v2c_gt(0,1), Tr_v2c_gt(0,2),
-        Tr_v2c_gt(1,0), Tr_v2c_gt(1,1), Tr_v2c_gt(1,2),
-        Tr_v2c_gt(2,0), Tr_v2c_gt(2,1), Tr_v2c_gt(2,2));
-        tf::Quaternion tfqt;
-        tf3d.getRotation(tfqt);
-
-        tf::Vector3 origin;
-        origin.setValue(Tr_v2c_gt(0,3),Tr_v2c_gt(1,3),Tr_v2c_gt(2,3));
-
-        transf_gt.setOrigin(origin);
-        transf_gt.setRotation(tfqt);
-
-        static tf::TransformBroadcaster br;
-        tf_livox_cam_gt = tf::StampedTransform(transf_gt, ros::Time::now(), "livox", "camera");
-        if (publish_tf_gt_) br.sendTransform(tf_livox_cam_gt);
-
-    }
-    catch (tf::TransformException ex){
-        ROS_ERROR("%s",ex.what());
-        ros::Duration(1.0).sleep();
-    }
-
-    return Tr_v2c_gt;
+    // This method required a live ROS/TF environment (Gazebo simulation).
+    // It is not available in the standalone (no-ROS) build.
+    cerr << "[obtainGT_GAZEBO] Not supported in standalone build." << endl;
+    return Eigen::Matrix4f::Identity();
 }
 
 

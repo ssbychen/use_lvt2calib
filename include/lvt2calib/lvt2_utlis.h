@@ -17,32 +17,16 @@
 #include <pcl/kdtree/kdtree.h>
 #include <pcl/common/eigen.h>
 #include <pcl/common/transforms.h>
-#include <pcl_ros/transforms.h>
 #include <pcl/registration/icp.h>
-#include <ros/ros.h>
 #include <Eigen/Core>
 #include <Eigen/Dense>
+#include <Eigen/Geometry>
 #include <opencv2/core/core.hpp>
 #include <opencv2/core/eigen.hpp>
-
-#ifdef TF2
-#include <tf2_ros/buffer.h>
-#include <tf2_ros/transform_listener.h>
-#include <tf2_ros/transform_broadcaster.h>
-#include <tf2/LinearMath/Matrix3x3.h>
-#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
-#include <geometry_msgs/TransformStamped.h>
-#else
-#include <tf/tf.h>
-#include <tf/transform_broadcaster.h>
-#include <tf/transform_listener.h>
-#include <tf_conversions/tf_eigen.h>
-#endif
 
 using namespace std;
 using namespace cv;
 using namespace pcl;
-using namespace tf;
 
 void sortPatternCentersYZ(pcl::PointCloud<pcl::PointXYZ>::Ptr pc, std::vector<pcl::PointXYZ> &v){
   double avg_y = 0, avg_z = 0;
@@ -200,62 +184,16 @@ void sortPatternCentersUV(std::vector<cv::Point2f> p, std::vector<cv::Point2f> &
 }
 
 std::vector<double> eigenMatrix2SixDOF(Eigen::Matrix4d transform_matrix){
-  tf::Matrix3x3 tf3d;
-  tf3d.setValue(transform_matrix(0,0), transform_matrix(0,1), transform_matrix(0,2),
-  transform_matrix(1,0), transform_matrix(1,1), transform_matrix(1,2),
-  transform_matrix(2,0), transform_matrix(2,1), transform_matrix(2,2));
+  double xt = transform_matrix(0,3);
+  double yt = transform_matrix(1,3);
+  double zt = transform_matrix(2,3);
 
-  // if(DEBUG) ROS_INFO("Final Transformation");
-  // if(DEBUG) cout << transform_matrix << endl;
-
-  tf::Quaternion tfqt;
-  tf3d.getRotation(tfqt);
-
-  #ifdef TF2
-
-  // static tf2_ros::TransformBroadcaster br;
-  // geometry_msgs::TransformStamped transformStamped;
-
-  // transformStamped.header.stamp = ros::Time::now();
-  // transformStamped.header.frame_id = "velodyne";
-  // transformStamped.child_frame_id = "stereo";
-  // transformStamped.transform.translation.x = transform_matrix(0,3);
-  // transformStamped.transform.translation.y = transform_matrix(1,3);
-  // transformStamped.transform.translation.z = transform_matrix(2,3);
-  // transformStamped.transform.rotation.x = tfqt.x();
-  // transformStamped.transform.rotation.y = tfqt.y();
-  // transformStamped.transform.rotation.z = tfqt.z();
-  // transformStamped.transform.rotation.w = tfqt.w();
-
-  // br.sendTransform(transformStamped);
-
-  #else
-
-  tf::Vector3 origin;
-  origin.setValue(transform_matrix(0,3),transform_matrix(1,3),transform_matrix(2,3));
-
-  tf::Transform transf;
-  transf.setOrigin(origin);
-  transf.setRotation(tfqt);
-
-  #endif
-
-  // Transformation matrix from stereo to lidar frame
-  static tf::TransformBroadcaster br;
-  tf::StampedTransform tf_velodyne2camera;  
-
-  tf_velodyne2camera = tf::StampedTransform(transf, ros::Time::now(), "stereo", "livox");
-  // if (publish_tf_) br.sendTransform(tf_velodyne2camera);
-
-  // The medium transformation matrix from lidar to stereo frame.
-  // tf::Transform inverse = tf_velodyne2camera.inverse();
-  double roll, pitch, yaw;
-  double xt = tf_velodyne2camera.getOrigin().getX(), yt = tf_velodyne2camera.getOrigin().getY(), zt = tf_velodyne2camera.getOrigin().getZ();
-  tf_velodyne2camera.getBasis().getRPY(roll, pitch, yaw);
-  // if(roll < 0){ roll += M_PI; }
-  // if(pitch < 0){  pitch += M_PI;}
-  // if(yaw < 0){ yaw += M_PI;}
-  
+  // Extract RPY (roll-pitch-yaw) from the rotation sub-matrix using ZYX convention
+  Eigen::Matrix3d R = transform_matrix.block<3,3>(0,0);
+  Eigen::Vector3d euler = R.eulerAngles(2, 1, 0); // returns [yaw, pitch, roll] for ZYX
+  double yaw   = euler[0];
+  double pitch = euler[1];
+  double roll  = euler[2];
 
   std::vector<double> params_6dof = {xt, yt, zt, roll, pitch, yaw};
   return params_6dof;

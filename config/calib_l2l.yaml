@@ -1,0 +1,21 @@
+# Lidar-to-Lidar extrinsic calibration configuration
+# Usage: ./extrinsic_calib_l2l config/calib_l2l.yaml
+
+# Path to the CSV file that contains collected feature-point pairs.
+features_info_dir: "data/features_l2l.csv"
+
+# Directory where calibration result files are written (must end with /).
+calib_result_dir: "output/"
+
+# Base name for the output files.
+calib_result_name: "l2l_result"
+
+# Sensor namespace labels used in output file names.
+ns_l1: "laser1"
+ns_l2: "laser2"
+
+# Set true to write calibration log CSV and extrinsic parameter CSV to disk.
+save_calib_file: true
+
+# Set true to sweep over all subset sizes (multi-experiment mode).
+is_multi_exp: false

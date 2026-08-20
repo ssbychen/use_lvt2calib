@@ -1,0 +1,29 @@
+# Lidar-to-Camera extrinsic calibration configuration
+# Usage: ./extrinsic_calib_l2c config/calib_l2c.yaml
+
+# Path to the CSV file that contains collected feature-point pairs.
+# Each row encodes 4 lidar centroids + 4 camera 3D centroids + 4 camera 2D points.
+features_info_dir: "data/features_l2c.csv"
+
+# Path to the camera intrinsic parameter file (txt format, keys K and D).
+camera_info_dir: "data/camera_info.txt"
+
+# Directory where calibration result files are written (must end with /).
+calib_result_dir: "output/"
+
+# Base name for the output files (e.g. produces <name>_exParam_min3d.csv).
+calib_result_name: "l2c_result"
+
+# Sensor namespace labels used in output file names.
+ns_l: "laser"
+ns_c:  "cam"
+
+# Set true to write calibration log CSV and extrinsic parameter CSV to disk.
+save_calib_file: true
+
+# Set true to sweep over all subset sizes (multi-experiment mode).
+is_multi_exp: false
+
+# Set true to open a PCL 3D visualizer window after calibration.
+# Disable on headless servers.
+points_visual_on: false
